@@ -1,0 +1,33 @@
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+
+body_condition <- read.csv("Body_Condition_Clean_3May2020.csv")
+
+body_condition <- body_condition %>% 
+  mutate(Collection_Date = dmy(Collection_Date)) %>% 
+  mutate_at(vars(Collection_Date), funs(year, month, day))
+#knows they are dates!!
+
+
+bc_plot_yr1 <- body_condition %>% 
+  ggplot(mapping = aes(x = Collection_Date, y = Crude_Fat, color = Species)) +
+  geom_jitter(alpha = 0.5) +
+  geom_smooth(alpha = 0.1) +
+  xlab("Collection Date (2017-2018)") + ylab("Lipid Content (Percent Dry Mass)") +
+  ggtitle("Suisun Dabbling Duck Body Condition Year 1")
+
+
+#Here we geaux again
+bc_yr2 <- read.csv("BC_CleanData_Yr2.csv")
+
+bc_yr2 <- bc_yr2 %>% 
+  mutate(Collection_Date = dmy(Collection_Date))
+
+bc_plot_yr2 <- bc_yr2 %>% 
+  ggplot(mapping = aes(x = Collection_Date, y = Crude_Fat, color = Species)) + 
+  geom_jitter(alpha = 0.5) +
+  geom_smooth(alpha = 0.1) +
+  xlab("Collection Date (2018-2019)") + ylab("Lipid Content (Percent Dry Mass)") +
+  ggtitle("Suisun Dabbling Duck Body Condition Year 2")
+
