@@ -2,6 +2,11 @@
 # author: Mickie Tang
 # Date: May 24, 2021
 
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(lme4)
+
 # Questions: 
 # How does duck body condition (lipid) change over time?
 # How does species and sex affect body condition over time?
@@ -19,8 +24,15 @@ tail(ducks)
 
 ducks$year <- as.factor(ducks$ï..year) # make year into a factor instead of num
 
+ducks$days.since.oct <-as.factor(ducks$days.since.oct)
+
 # how to convert dates to "dates" in R?
 # was there a species we wanted to remove from the analysis?
+
+# code from Jackie from OG Graphs, need to adjust
+# ducks <- ducks %>% 
+#   mutate(Collection_Date = dmy(Collection_Date)) %>% 
+#   mutate_at(vars(Collection_Date), funs(year, month, day))
 
 # plot the response variable, lipid
 hist(ducks$lipid)
