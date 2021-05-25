@@ -35,7 +35,7 @@ ggplot(ducks, aes(x = species, y = lipid)) +
   geom_jitter(alpha=0.2) +
   geom_boxplot(alpha=0.5)
   
-# sex grouped by species
+# sex grouped by species - there might be a sex*species interaction
 ggplot(ducks, aes(x = sex, y = lipid)) +
   geom_jitter(alpha=0.2) +
   geom_boxplot(alpha=0.5) +
@@ -43,6 +43,12 @@ ggplot(ducks, aes(x = sex, y = lipid)) +
 
 # year grouped by species
 ggplot(ducks, aes(x = year, y = lipid)) +
+  geom_jitter(alpha=0.2) +
+  geom_boxplot(alpha=0.5) +
+  facet_wrap(~ species)
+
+# year grouped by species and sex
+ggplot(ducks, aes(x = year, y = lipid, color=sex)) +
   geom_jitter(alpha=0.2) +
   geom_boxplot(alpha=0.5) +
   facet_wrap(~ species)
