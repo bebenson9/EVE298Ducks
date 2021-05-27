@@ -10,6 +10,9 @@ str(ducks)
 library(ggplot2)
 library(tidyverse)
 
+#MAKE DATE FACTOR TO ALLOW NONLINEAR
+#USE LME4 AND LMERTEST FOR P VALUES - OK TO USE LLTEST BC ERROR IS OK
+
 ###
 ### Set up variables ----
 ###
@@ -44,92 +47,129 @@ ducks.df$hunt <- as.factor(ifelse(ducks$jul.date>277 |
                                        ducks$jul.date<11,
                                      "hunt","no"))
 summary(ducks.df$hunt)
+boxplot(ducks.df$lipid ~ ducks.df$hunt, pch = 20)
 
-ducks.df17 <- ducks.df[ducks.df$year==2017,]
-ducks.df18 <- ducks.df[ducks.df$year==2018,]
-ggplot(aes(date, lipid, col=species), data = ducks.df) + 
-  geom_point() + 
-  geom_smooth(aes(group = species), method = "loess")
+ducks.df <- ducks.df[!is.na(ducks.df$molt),]
+DUCKS <- ducks.df[ducks.df$species!="CITE",]
 
+DUCKS17 <- DUCKS[DUCKS$year==2017,]
+DUCKS18 <- DUCKS[DUCKS$year==2018,]
 
 ###
 ### Data exploration ----
 ###
 
-str(ducks.df)
+str(DUCKS)
 
 # response variable
-plot(ducks.df$lipid)
-hist(ducks.df$lipid, col="hotpink")
-dotchart(ducks.df$lipid)
+plot(DUCKS$lipid)
+hist(DUCKS$lipid, col="hotpink")
+dotchart(DUCKS$lipid)
 
 # predictor variables
-hist((ducks.df$date), col="lightblue")
-dotchart(ducks.df$date)
+hist((DUCKS$date), col="lightblue")
+dotchart(DUCKS$date)
 
-ducks.df %>%
+DUCKS %>%
   ggplot(aes(x = species, y = lipid, fill = hunt, alpha = 0.5))+
   geom_boxplot()+
   facet_wrap(~year,2)
+
+ggplot(aes(date, lipid, col=sex), data = DUCKS) + 
+  geom_point() + 
+  geom_smooth(aes(group = sex), method = "loess", se=F) +
+  facet_wrap(~species,2) +
+  theme_bw()
 
 ###
 ### Modeling ----
 ###
 
-str(ducks.df)
-ducksDF <- ducks.df[!is.na(ducks.df$molt),]
+str(DUCKS)
 
-library(nlme)
-mod.full <- lme(lipid ~ date + sex + species + 
-             molt + age + year + hunt + species:date +
-               sex:date + age:date,
-           random = ~1|site, 
-           data = ducksDF,
-           method = "REML")
-car::vif(mod.full)
-mod.RE <- gls(lipid ~ date + sex + species + 
-             molt + age + year + hunt +
-               species:date + sex:date + age:date,
-           data = ducksDF,
-           method = "REML")
-anova(mod.full,mod.RE)
+library(lme4)
+library(lmerTest)
 
-mod.fullML <- lme(lipid ~ date + sex + species + 
-                  molt + age + year + hunt +
-                    species:date + sex:date + age:date,
-                random = ~1|site, 
-                data = ducksDF,
-                method = "ML")
-drop1(mod.fullML, test="Chisq")
-mod.moltML <- lme(lipid ~ date + sex + species + 
-                    age + year + hunt +
-                    species:date + sex:date + age:date,
-                  random = ~1|site, 
-                  data = ducksDF,
-                  method = "ML")
-drop1(mod.moltML, test="Chisq")
-mod.moltML <- lme(lipid ~ date + sex + species + 
-                    age + year + hunt +
-                    species:date + sex:date,
-                  random = ~1|site, 
-                  data = ducksDF,
-                  method = "ML")
-drop1(mod.moltML, test="Chisq")
+### * first collinearity ----
 
-mod.final <- lme(lipid ~ date + sex + species + 
-                    age + year + hunt +
-                      species:date + sex:date,
-                  random = ~1|site, 
-                  data = ducksDF,
-                  method = "REML")
-mod.final.gls <- gls(lipid ~ date + sex + species + 
-                      age + year + hunt +
-                        species:date + sex:date,
-                    data = ducksDF,
-                    method = "REML")
-anova(mod.final.gls,mod.final)
+mod.vif <- lmer(lipid ~ 
+                   date + species + age + sex + year + (1|site), 
+                 data = DUCKS)
+car::vif(mod.vif) #all good
 
-summary(mod.final.gls)
+### * full model ----
+
+mod.full <- lmer(lipid ~ 
+                   date:species + date:sex +
+                   date + species + age + sex + year + (1|site), 
+                 data = DUCKS)
+summary(mod.full)
+
+#or test polynomial date
+mod.poly <- lmer(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex +
+                   poly(date,3) + species + age + sex + year + (1|site), 
+                 data = DUCKS)
+AIC(mod.poly,mod.full)
+
+mod.full = mod.poly
+
+### * terms significance ----
+
+## RANDOM EFFECT = site
+
+mod.full.nlme <- lme(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex +
+                   poly(date,3) + species + age + sex + year, random=~1|site,
+                   method="REML",
+                 data = DUCKS)
+
+mod.RE <- gls(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex +
+                   poly(date,3) + species + age + sex + year, 
+              method="REML",
+                 data = DUCKS)
+anova(mod.full.nlme,mod.RE) #significant
+
+
+## FIXED EFFECTS -- refit using ML
+
+mod.full.ML <- lmer(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex +
+                   poly(date,3) + species + age + sex + year + (1|site), 
+                   REML = FALSE,
+                 data = DUCKS)
+
+mod.year <- lmer(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex +
+                   poly(date,3) + species + age + sex + (1|site), 
+                 REML = FALSE,
+                 data = DUCKS)
+anova(mod.full.ML,mod.year) #year is significant
+
+mod.age <- lmer(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex +
+                   poly(date,3) + species + year + sex + (1|site), 
+                 REML = FALSE,
+                 data = DUCKS)
+anova(mod.full.ML,mod.age) #age is significant
+
+mod.ds <- lmer(lipid ~ 
+                  poly(date,3):sex +
+                  poly(date,3) + species + age + year + sex + (1|site), 
+                REML = FALSE,
+                data = DUCKS)
+anova(mod.full.ML,mod.ds) #poly(date,3):species interaction
+
+mod.dsex <- lmer(lipid ~ 
+                      poly(date,3):species + 
+                      poly(date,3) + species + age + sex + year + (1|site), 
+                    REML = FALSE,
+                    data = DUCKS)
+anova(mod.full.ML,mod.dsex) #poly(date,3):sex interaction
+
+mod.final <- mod.full
+summary(mod.final)
 
 ###
 ### Model validation ----
@@ -145,27 +185,29 @@ hist(resid(mod.final))
 
 #3 variance homogeneity
 coefficients(mod.final)
-plot(resid(mod.final) ~ ducksDF$date, pch=20)
-boxplot(resid(mod.final) ~ ducksDF$sex)
-boxplot(resid(mod.final) ~ ducksDF$species)
-boxplot(resid(mod.final) ~ ducksDF$hunt)
-boxplot(resid(mod.final) ~ ducksDF$year)
-boxplot(resid(mod.final) ~ ducksDF$age)
-boxplot(resid(mod.final) ~ ducksDF$molt)
+plot(resid(mod.final) ~ DUCKS$date, pch=20)
+boxplot(resid(mod.final) ~ DUCKS$sex)
+boxplot(resid(mod.final) ~ DUCKS$species)
+boxplot(resid(mod.final) ~ DUCKS$hunt)
+boxplot(resid(mod.final) ~ DUCKS$year)
+boxplot(resid(mod.final) ~ DUCKS$age)
+boxplot(resid(mod.final) ~ DUCKS$molt)
 
 #4 plot predictor effects
 terms(mod.final)
 library(effects)
+plot(effect(mod=mod.final,term="poly(date,3):species"))
+plot(effect(mod=mod.final,term="poly(date,3):sex"))
+plot(effect(mod=mod.final,term="sex"))
+plot(effect(mod=mod.final,term="species"))
+plot(effect(mod=mod.final,term="poly(date,3)"))
 plot(effect(mod=mod.final,term="age"))
 plot(effect(mod=mod.final,term="year"))
-plot(effect(mod=mod.final,term="hunt"))
-plot(effect(mod=mod.final,term="date:sex"))
-plot(effect(mod=mod.final,term="date:species"))
 
 #5 R2
 summary(mod.final)
 fixef(mod.final)
-fix.matrix <- model.matrix(mod.final, data = ducksDF)
+fix.matrix <- model.matrix(mod.final, data = DUCKS)
 
 fixed <- (fixef(mod.final)[1] +
             fixef(mod.final)[2]*fix.matrix[,2] +
