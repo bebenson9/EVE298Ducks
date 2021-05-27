@@ -3,6 +3,8 @@
 ### Read in data ----
 ###
 
+# this is a test
+
 ducks <- read.csv("~/Box/EVE298/data.csv", header = T)
 head(ducks)
 str(ducks)
@@ -105,7 +107,7 @@ mod.full <- lmer(lipid ~
                  data = DUCKS)
 summary(mod.full)
 
-#or test polynomial date
+#or test polynomial date 
 mod.poly <- lmer(lipid ~ 
                    poly(date,3):species + poly(date,3):sex +
                    poly(date,3) + species + age + sex + year + (1|site), 
