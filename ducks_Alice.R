@@ -73,7 +73,7 @@ hist((DUCKS$date), col="lightblue")
 dotchart(DUCKS$date)
 
 DUCKS %>%
-  ggplot(aes(x = species, y = lipid, fill = hunt, alpha = 0.5))+
+  ggplot(aes(x = species, y = lipid, fill = sex, alpha = 0.5))+
   geom_boxplot()+
   facet_wrap(~year,2)
 
@@ -82,6 +82,8 @@ ggplot(aes(date, lipid, col=sex), data = DUCKS) +
   geom_smooth(aes(group = sex), method = "loess", se=F) +
   facet_wrap(~species,2) +
   theme_bw()
+
+pairs(DUCKS)
 
 ###
 ### Modeling ----
@@ -95,83 +97,109 @@ library(lmerTest)
 ### * first collinearity ----
 
 mod.vif <- lmer(lipid ~ 
-                   date + species + age + sex + year + (1|site), 
+                   date + species + age + sex + year + molt + (1|site), 
                  data = DUCKS)
 car::vif(mod.vif) #all good
 
 ### * full model ----
 
-mod.full <- lmer(lipid ~ 
-                   date:species + date:sex +
-                   date + species + age + sex + year + (1|site), 
+mod.full <- lmer(lipid ~ poly(date,3):species:sex + 
+#the effects of time differ btwn the species and this effect differs btwn the sexes
+  poly(date,3):species + poly(date,3):sex + species:sex +
+  poly(date,3) + species + sex + 
+                   age + year + molt + #confounds
+                   (1|site), 
+                 REML = TRUE,
                  data = DUCKS)
 summary(mod.full)
 
-#or test polynomial date 
-mod.poly <- lmer(lipid ~ 
-                   poly(date,3):species + poly(date,3):sex +
-                   poly(date,3) + species + age + sex + year + (1|site), 
+### * model selection ----
+
+library(nlme)
+
+## RANDOM EFFECT
+mod.full.nlme <- lme(lipid ~ poly(date,3):species:sex +
+                   poly(date,3):species + poly(date,3):sex + species:sex +
+                   poly(date,3) + species + sex + 
+                   age + year + molt,
+                   random=~1|site, 
+                 method = "REML",
                  data = DUCKS)
-AIC(mod.poly,mod.full)
-
-mod.full = mod.poly
-
-### * terms significance ----
-
-## RANDOM EFFECT = site
-
-mod.full.nlme <- lme(lipid ~ 
-                   poly(date,3):species + poly(date,3):sex +
-                   poly(date,3) + species + age + sex + year, random=~1|site,
-                   method="REML",
-                 data = DUCKS)
-
-mod.RE <- gls(lipid ~ 
-                   poly(date,3):species + poly(date,3):sex +
-                   poly(date,3) + species + age + sex + year, 
-              method="REML",
-                 data = DUCKS)
-anova(mod.full.nlme,mod.RE) #significant
-
-
-## FIXED EFFECTS -- refit using ML
-
-mod.full.ML <- lmer(lipid ~ 
-                   poly(date,3):species + poly(date,3):sex +
-                   poly(date,3) + species + age + sex + year + (1|site), 
-                   REML = FALSE,
-                 data = DUCKS)
-
-mod.year <- lmer(lipid ~ 
-                   poly(date,3):species + poly(date,3):sex +
-                   poly(date,3) + species + age + sex + (1|site), 
-                 REML = FALSE,
-                 data = DUCKS)
-anova(mod.full.ML,mod.year) #year is significant
-
-mod.age <- lmer(lipid ~ 
-                   poly(date,3):species + poly(date,3):sex +
-                   poly(date,3) + species + year + sex + (1|site), 
-                 REML = FALSE,
-                 data = DUCKS)
-anova(mod.full.ML,mod.age) #age is significant
-
-mod.ds <- lmer(lipid ~ 
-                  poly(date,3):sex +
-                  poly(date,3) + species + age + year + sex + (1|site), 
-                REML = FALSE,
+mod.RE <- gls(lipid ~ poly(date,3):species:sex +
+                   poly(date,3):species + poly(date,3):sex + species:sex +
+                   poly(date,3) + species + sex + 
+                   age + year + molt, 
+                method = "REML",
                 data = DUCKS)
-anova(mod.full.ML,mod.ds) #poly(date,3):species interaction
+anova(mod.full.nlme,mod.RE)
 
-mod.dsex <- lmer(lipid ~ 
-                      poly(date,3):species + 
-                      poly(date,3) + species + age + sex + year + (1|site), 
+## FIXED EFFECTS
+#first test 3 way
+mod.full.ML <- lmer(lipid ~ poly(date,3):species:sex +
+                   poly(date,3):species + poly(date,3):sex + species:sex +
+                   poly(date,3) + species + sex + 
+                   age + year + molt + 
+                   (1|site), 
+                 REML = FALSE,
+                 data = DUCKS)
+drop1(mod.full.ML,test="Chisq")
+
+# first test poly(date,3):species:sex effect
+mod.3way <- lmer(lipid ~ 
+                   poly(date,3):species + poly(date,3):sex + species:sex +
+                   poly(date,3) + species + sex + 
+                   age + year + molt + 
+                   (1|site), 
                     REML = FALSE,
                     data = DUCKS)
-anova(mod.full.ML,mod.dsex) #poly(date,3):sex interaction
+anova(mod.full.ML, mod.3way) #3 way p = 0.03282 
+#GET P-VALUES FITTING WITH REML??
 
-mod.final <- mod.full
-summary(mod.final)
+#then test single fixed effects
+mod.molt <- lmer(lipid ~ poly(date,3):species:sex +
+                      poly(date,3):species + poly(date,3):sex + species:sex +
+                      poly(date,3) + species + sex + 
+                      age + year + 
+                      (1|site), 
+                    REML = FALSE,
+                    data = DUCKS)
+anova(mod.full.ML, mod.molt) #molt p = 0.15 *discuss
+
+mod.age <- lmer(lipid ~ poly(date,3):species:sex +
+                   poly(date,3):species + poly(date,3):sex + species:sex +
+                   poly(date,3) + species + sex + 
+                   year + molt + 
+                   (1|site), 
+                 REML = FALSE,
+                 data = DUCKS)
+anova(mod.full.ML, mod.age) #molt p = 0.01384
+
+mod.year <- lmer(lipid ~ poly(date,3):species:sex +
+                      poly(date,3):species + poly(date,3):sex + species:sex +
+                      poly(date,3) + species + sex + 
+                      age + molt + 
+                      (1|site), 
+                    REML = FALSE,
+                    data = DUCKS)
+anova(mod.full.ML, mod.year) #molt p = 0.01189
+
+### * final model ----
+
+mod.final <- lmer(lipid ~ poly(date,3):species:sex +
+                    poly(date,3):species + poly(date,3):sex + species:sex +
+                    poly(date,3) + species + sex + 
+                    age + year + molt + 
+                    (1|site), 
+                  REML = TRUE,
+                  data = DUCKS)
+
+mod.final.nlme <- lme(lipid ~ poly(date,3):species:sex +
+                    poly(date,3):species + poly(date,3):sex + species:sex +
+                    poly(date,3) + species + sex + 
+                    age + year + molt,
+                    random=~1|site, 
+                  method = "REML",
+                  data = DUCKS)
 
 ###
 ### Model validation ----
@@ -188,68 +216,41 @@ hist(resid(mod.final))
 #3 variance homogeneity
 coefficients(mod.final)
 plot(resid(mod.final) ~ DUCKS$date, pch=20)
-boxplot(resid(mod.final) ~ DUCKS$sex)
-boxplot(resid(mod.final) ~ DUCKS$species)
-boxplot(resid(mod.final) ~ DUCKS$hunt)
-boxplot(resid(mod.final) ~ DUCKS$year)
-boxplot(resid(mod.final) ~ DUCKS$age)
-boxplot(resid(mod.final) ~ DUCKS$molt)
+boxplot(resid(mod.final) ~ DUCKS$sex, pch=20)
+boxplot(resid(mod.final) ~ droplevels(DUCKS$species), pch=20)
+boxplot(resid(mod.final) ~ DUCKS$hunt, pch=20)
+boxplot(resid(mod.final) ~ DUCKS$year, pch=20)
+boxplot(resid(mod.final) ~ DUCKS$age, pch=20)
+boxplot(resid(mod.final) ~ DUCKS$molt, pch=20)
 
 #4 plot predictor effects
 terms(mod.final)
 library(effects)
-plot(effect(mod=mod.final,term="poly(date,3):species"))
-plot(effect(mod=mod.final,term="poly(date,3):sex"))
-plot(effect(mod=mod.final,term="sex"))
-plot(effect(mod=mod.final,term="species"))
-plot(effect(mod=mod.final,term="poly(date,3)"))
+plot(effect(mod=mod.final,term="poly(date,3):species:sex"),
+     x.var=1,multiline = T)
 plot(effect(mod=mod.final,term="age"))
+plot(effect(mod=mod.final,term="molt"))
 plot(effect(mod=mod.final,term="year"))
 
 #5 R2
-summary(mod.final)
-fixef(mod.final)
-fix.matrix <- model.matrix(mod.final, data = DUCKS)
-
-fixed <- (fixef(mod.final)[1] +
-            fixef(mod.final)[2]*fix.matrix[,2] +
-            fixef(mod.final)[3]*fix.matrix[,3] +
-            fixef(mod.final)[4]*fix.matrix[,4] +
-            fixef(mod.final)[5]*fix.matrix[,5] +
-            fixef(mod.final)[6]*fix.matrix[,6] +
-            fixef(mod.final)[7]*fix.matrix[,7] +
-            fixef(mod.final)[8]*fix.matrix[,8] +
-            fixef(mod.final)[9]*fix.matrix[,9] +
-            fixef(mod.final)[10]*fix.matrix[,10] +
-            fixef(mod.final)[11]*fix.matrix[,11] +
-            fixef(mod.final)[12]*fix.matrix[,12] +
-            fixef(mod.final)[13]*fix.matrix[,13] +
-            fixef(mod.final)[14]*fix.matrix[,14] +
-            fixef(mod.final)[15]*fix.matrix[,15] +
-            fixef(mod.final)[16]*fix.matrix[,16] +
-            fixef(mod.final)[17]*fix.matrix[,17] +
-            fixef(mod.final)[18]*fix.matrix[,18] +
-            fixef(mod.final)[19]*fix.matrix[,19]
-)
-
-varF <- var(fixed)
-
-var.est <- as.numeric(VarCorr(mod.final))
-varR <- var.est[1] #'variance among sites'
-varE <- var.est[2] #'residual variance'
-
-'marginal R2 - variance explained by fixed effects only'
-varF/(varF + varR + varE)
-
-'conditional R2 = variance explained by fixed and random'
-(varF + varR)/(varF + varR + varE)
-
 library(MuMIn)
-r.squaredGLMM(mod.final)
+r.squaredGLMM(mod.final.nlme)
+'marginal R2 - variance explained by fixed effects only'
+'conditional R2 = variance explained by fixed and random'
+
+###
+### Post-hoc testing ----
+###
+
+summary(mod.final)
+summary(DUCKS$date) 
+#get lone fixed effects effect sizes (age, year, molt)
+
+#for the 3-way do post hoc/
+#emmeans to figure out which duck combos do what
 
 
-
-'Give me an effect size!'
+'From kates class code - Give me an effect size!'
 
 vardate <- var(fixef(mod.final)[2]*fix.matrix[,2])
 varsex <- var(fixef(mod.final)[3]*fix.matrix[,3])
@@ -259,4 +260,30 @@ vardate/(varF + varR + varE)
 
 'variance explained by sex'
 varsex/(varF + varR + varE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# * emmeans ----
+
+# library(emmeans)
+# contrast(emmeans(mod.final, ~species:sex, data=DUCKS), 
+#          "consec", simple = "each", combine = TRUE, adjust = "mvt")
+# #driven by NOPI-MALL & MALL M-F
+# 
+
+
+
 
