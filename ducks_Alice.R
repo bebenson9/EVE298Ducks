@@ -28,7 +28,8 @@ ducks.df$species <- as.factor(ducks$species)
 summary(ducks.df$species)
 ducks.df$sex <- as.factor(ducks$sex)
 summary(ducks.df$sex)
-ducks.df$age <- as.factor(ducks$age)
+ducks.df$age <- as.factor(ifelse(ducks$age=="A","Adult",
+                                 "Immature"))
 summary(ducks.df$age)
 ducks.df$site <- as.factor(ducks$site)
 summary(ducks.df$site)
@@ -73,8 +74,21 @@ hist((DUCKS$date), col="lightblue")
 dotchart(DUCKS$date)
 
 DUCKS %>%
+  ggplot(aes(x = species, fill = sex, alpha = 0.5))+
+  geom_bar()+
+  theme_bw()+
+  facet_wrap(~year:age,2)
+
+DUCKS %>%
+  ggplot(aes(x = species, fill = sex, alpha = 0.5))+
+  geom_bar()+
+  theme_bw()+
+  facet_wrap(~age,2)
+
+DUCKS %>%
   ggplot(aes(x = species, y = lipid, fill = sex, alpha = 0.5))+
   geom_boxplot()+
+  theme_bw() +
   facet_wrap(~year,2)
 
 ggplot(aes(date, lipid, col=sex), data = DUCKS) + 
@@ -222,6 +236,7 @@ boxplot(resid(mod.final) ~ DUCKS$hunt, pch=20)
 boxplot(resid(mod.final) ~ DUCKS$year, pch=20)
 boxplot(resid(mod.final) ~ DUCKS$age, pch=20)
 boxplot(resid(mod.final) ~ DUCKS$molt, pch=20)
+boxplot(resid(mod.final) ~ DUCKS$site, pch=20)
 
 #4 plot predictor effects
 terms(mod.final)
